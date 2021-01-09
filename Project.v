@@ -10,7 +10,6 @@ Import ListNotations.
 Require Import Bool.
 Scheme Equality for string.
 
-
 Inductive natType :=
 | errorNat : natType
 | num : nat -> natType.
@@ -33,7 +32,7 @@ Inductive AExp :=
 | aminus : AExp -> AExp -> AExp
 | atimes : AExp -> AExp -> AExp
 | adivide : AExp -> AExp -> AExp
-| amodulus : AExp -> AExp -> AExp
+| amodulo : AExp -> AExp -> AExp
 | alength : string -> AExp.
 
 Coercion anat : natType >-> AExp.
@@ -45,11 +44,13 @@ Notation "A --'" := (aminus A 1) (at level 50).
 Notation "A *' B" := (atimes A B) (at level 48).
 Notation "A **'" := (atimes A A) (at level 48).
 Notation "A /' B" := (adivide A B) (at level 48).
-Notation "A %' B" := (amodulus A B) (at level 48).
+Notation "A %' B" := (amodulo A B) (at level 48).
+Notation "'LENGTH' A" := (alength A) (at level 50).
 
 Inductive BExp :=
 | btrue : BExp
 | bfalse : BExp
+| bvar : string -> BExp
 | bless : AExp -> AExp -> BExp
 | bgreat: AExp -> AExp -> BExp
 | bequ : AExp -> AExp -> BExp
@@ -63,26 +64,19 @@ Notation "!' A" := (bnot A) (at level 52).
 Notation "A >=' B" := (bnot (bless A B)) (at level 52).
 Notation "A <=' B" := (bnot (bgreat A B)) (at level 52).
 Notation "A &&' B" := (band A B) (at level 52).
-Notation "A ||' B" := (bnot A B) (at level 52).
+Notation "A ||' B" := (bor A B) (at level 52).
 
 Inductive CExp :=
+| cvar : string -> CExp
 | cstring : stringType -> CExp
 | cplus : CExp -> CExp -> CExp
 | ctimes : AExp -> CExp -> CExp
-| cfind : CExp -> CExp -> CExp
+| csubstring : CExp -> CExp -> CExp
 | ccompare : CExp -> CExp -> CExp
 | cset : CExp -> CExp -> CExp
-| crev : CExp -> CExp -> CExp
-| clwr : CExp -> CExp
-| cupr : CExp -> CExp.
+| crev : CExp -> CExp -> CExp.
 
 Coercion cstring : stringType >-> CExp.
-Inductive Array := 
-| errorArray : Array
-| natArray : nat -> list natType -> Array
-| boolArray : nat -> list boolType -> Array
-| stringArray : nat -> list stringType -> Array
-| multiD : nat -> list Array -> Array.
 
 Definition Params := list string.
 Inductive State :=
@@ -92,7 +86,6 @@ Inductive State :=
 | assignBool : string -> BExp -> State
 | declareString : string -> State
 | assignString : string -> CExp -> State
-| declareArray : string -> Array ->State
 | callFunction : string -> Params -> State
 | sequence : State -> State -> State
 | while : BExp -> State -> State
@@ -101,7 +94,7 @@ Inductive State :=
 | switch: AExp -> list cases -> State
 with cases := 
 | default : State -> cases
-| case : nat -> State -> cases.
+| case : natType -> State -> cases.
 
 Inductive Val :=
 | undecl: Val
@@ -128,7 +121,7 @@ Inductive Language :=
 | sequencer : Language -> Language -> Language.
 
 Notation "'NAT' A" := (declareNat A) (at level 98).
-Notation "'Bool' A" := (declareBool A) (at level 98).
+Notation "'BOOL' A" := (declareBool A) (at level 98).
 Notation "'STRING' A" := (declareString A) (at level 98).
 Notation "A :n:= B" := (assignNat A B) (at level 98).
 Notation "A :b:= B" := (assignBool A B) (at level 98).
@@ -155,7 +148,7 @@ Check STRING "name".
 Check STRING "name" ;; ("test" :s:= "no").
 Check If ( 2 >=' 3 ) {"a" :b:= btrue}.
 Check While ( "a" <' 4 ) { "a" :n:= "a" ++'}.
-Check Bool "flag" ;; Switch (2 +' 2) : { Case (4): {"flag" :b:= btrue} ; Default : {"flag" :b:= bfalse}}.
+Check BOOL   "flag" ;; Switch (2 +' 2) : { Case (4): {"flag" :b:= btrue} ; Default : {"flag" :b:= bfalse}}.
 Check For (NAT "i";; ("i" :n:= 10);"i" >=' 0;"i" :n:= "i"++') {"a" :n:= "a" +' "i"}.
 
 Definition Env := string -> Val.
@@ -222,59 +215,64 @@ Definition minusNatType (a b : natType) : natType :=
 Compute minusNatType 2 (plusNatType 1 3).
 Compute minusNatType (minusNatType 7 2) (plusNatType 1 2).
 
-Definition multiplyNatType (a b : natType) : natType :=
+Definition timesNatType (a b : natType) : natType :=
   match a, b with
   | num a, num b => num (a * b)
   | _, _ => errorNat
   end.
-Compute multiplyNatType 2 2.
-Compute multiplyNatType (plusNatType 1 1) (minusNatType 1 1). 
+Compute timesNatType 2 2.
+Compute timesNatType (plusNatType 1 1) (minusNatType 1 1). 
 
 Definition divideNatType (a b : natType) : natType :=
   match a, b with
-  | _, num 0 => errorNat
-  | num a, num b => num (Nat.div a b)
-  | _, _ => errorNat
+    | _, num 0 => errorNat
+    | num a, num b => num (Nat.div a b)
+    | _, _ => errorNat
   end.
 Compute divideNatType 2 0.
-Compute divideNatType 4 (multiplyNatType (plusNatType 0 1) (minusNatType 5 2)).
+Compute divideNatType 4 (timesNatType (plusNatType 0 1) (minusNatType 5 2)).
 
 Definition moduloNatType (a b : natType) : natType :=
   match a, b with
-  | _, num 0 => errorNat
-  | num a, num b => num (Nat.modulo a b)
-  | _, _ => errorNat
+   | _, num 0 => errorNat
+   | num a, num b => num (Nat.modulo a b)
+   | _, _ => errorNat
   end.
 Compute moduloNatType 76 7.
 Compute moduloNatType 0 0.
 
+Definition equalBoolType (a b : natType) : boolType :=
+  match a, b with
+    | num a, num b => Boolean (Nat.eqb a b)
+    | _, _ => errorBool
+  end.
 Definition lessBoolType (a b : natType) : boolType :=
   match a, b with
-  | num a, num b => Boolean (Nat.ltb a b)
-  | _, _ => errorBool
+    | num a, num b => Boolean (Nat.ltb a b)
+    | _, _ => errorBool
   end.
 Compute lessBoolType 2 2. 
-Compute lessBoolType (plusNatType 1 2) (multiplyNatType 2 2).
+Compute lessBoolType (plusNatType 1 2) (timesNatType 2 2).
 
 Definition greatBoolType (a b : natType) : boolType :=
   match a, b with
-  | num a, num b => Boolean (Nat.ltb b a)
-  | _, _ => errorBool
+    | num a, num b => Boolean (Nat.ltb b a)
+    | _, _ => errorBool
   end.
 Compute greatBoolType 2 2. 
-Compute greatBoolType (plusNatType 1 2) (multiplyNatType 2 2).
+Compute greatBoolType (plusNatType 1 2) (timesNatType 2 2).
 
 Definition notBoolType (a : boolType) : boolType :=
   match a with
-  | Boolean a => Boolean (negb a)
-  | _ => errorBool
+    | Boolean a => Boolean (negb a)
+    | _ => errorBool
   end.
 Compute notBoolType (greatBoolType 2 2).
 
 Definition andBoolType (a b : boolType) : boolType :=
   match a, b with
-  | Boolean a, Boolean b => Boolean (andb a b)
-  | _, _ => errorBool
+    | Boolean a, Boolean b => Boolean (andb a b)
+    | _, _ => errorBool
   end.
 Compute andBoolType (notBoolType (greatBoolType 2 2)) (lessBoolType 5 6).
 
@@ -296,17 +294,21 @@ Definition appendStringType (a b : Val) : stringType :=
     | _, _ => errorString
   end.
 Compute appendStringType (strings "no") (strings " coq").
-Fixpoint multiplyStringType (a : nat) (b c : Val) : stringType :=
-  match a, b, c with
-    | 0, strings b, _ => ""
-    | 1, strings b, _ => b
-    | S (a'), strings b, strings c =>  multiplyStringType a' (strings (append b c)) (strings c)
-    | S (a'), strings b, _ => multiplyStringType a' (strings (append b b)) (strings b)
-    | _, _, _ => errorString
+Fixpoint multiply (a : nat) (b : string) : string :=
+  match a, b with
+    | 0, _ => ""
+    | _, EmptyString => ""
+    | 1, String c b' => b
+    | S a', String c b' => append b (multiply a' b)
   end.
-Compute multiplyStringType 2 (strings "hei ") 0.
-Compute multiplyStringType 3 (strings "uh ") 0.
-Compute multiplyStringType 10 (strings "woo") 0.
+Compute multiply 3 "oof".
+Definition multiplyStringType (a : nat) (b : Val) : stringType :=
+  match a, b with
+    | a, strings b => multiply a b 
+    | _, _ => errorString
+  end.
+Compute multiplyStringType 2 (strings "hei ").
+Compute multiplyStringType 3 (strings "uh ").
 
 Definition compareStringType (a b : Val) : boolType :=
   match a, b with
@@ -355,51 +357,78 @@ Definition reverseStringType (s : Val) : stringType :=
     | _ => errorString
   end.
 Compute reverseStringType (strings "erom on epon").
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
+
+Fixpoint aEval (x : AExp) (env : Env) : natType :=
+  match x with
+    | anat x => x
+    | avar variable => match (env variable) with
+                         | naturals nr => nr
+                         | _ => errorNat
+                       end
+    | aplus a b => (plusNatType (aEval a env) (aEval b env))
+    | aminus a b => (minusNatType (aEval a env) (aEval b env))
+    | atimes a b => (timesNatType (aEval a env) (aEval b env))
+    | adivide a b => (divideNatType (aEval a env) (aEval b env))
+    | amodulo a b => (moduloNatType (aEval a env) (aEval b env))
+    | alength a => (lengthStringType (env a))
+  end.
+Compute aEval ("var1" *' "var1") (update (update startEnv "var1" def) "var1" 12).
+
+Fixpoint bEval (x : BExp) (env : Env) : boolType :=
+  match x with
+    | btrue => true
+    | bfalse => false
+    | bvar variable => match (env variable) with
+                  | booleans v => v
+                  | _ => errorBool
+                end
+    | bless a b => (lessBoolType (aEval a env) (aEval b env))
+    | bgreat a b => (greatBoolType (aEval a env) (aEval b env))
+    | bequ a b => (equalBoolType (aEval a env) (aEval b env))
+    | bnot a => (notBoolType (bEval a env))
+    | band a b => (andBoolType (bEval a env) (bEval b env))
+    | bor a b => (orBoolType (bEval a env) (bEval b env))
+  end.
+Compute bEval (((2 +' 2) <' 3) ||' ("unu" >' "zero")) (update (update (update (update startEnv "zero" def) "zero" 0) "unu" def) "unu" 1).
+
+Definition declarations (x : State) : nat :=
+  match x with
+    | declareNat x => 1
+    | declareBool x => 2
+    | declareString x => 3
+    | _ => 0
+  end.
+Definition defaultValues (n : nat) : Val :=
+  match n with
+    | 1 => naturals 1
+    | 2 => booleans false
+    | 3 => strings ""
+    | _ => def
+  end.
+
+Inductive List :=
+| nil : List
+| push : nat -> List -> List.
+Fixpoint lengthList (list : List) : nat :=
+  match list with
+    | nil => 0
+    | push _ list' => S (lengthList list')
+  end.
+Compute lengthList (push 2 (push 3 (push 4(push 5 nil)))).
+Fixpoint nthElement (n : nat) (list : List) : nat :=
+  match n, list with
+    | _, nil => 0
+    | _, push x nil => x
+    | 0, push x list' => x
+    | S n', push x list' => nthElement n' list'
+  end. 
+Compute nthElement 6 (push 2 (push 3 (push 4(push 5 nil)))).
+
+Inductive Array := 
+| errorArray : Array
+| natArray : string -> nat -> List -> Array.
+Compute natArray "test" 5 (nil).
+Notation "'emptyArray' A ';' B ';' " := (natArray A B nil) (at level 70).
+Notation "'array' A ';' B ';' '=' [ a , .. , b ] " := (natArray A B (push a .. (push b nil) ..))(at level 80).
+Compute emptyArray "pls work" ;10; .
+Compute array "yes" ;2; = [ 2 , 3 ].
