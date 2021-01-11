@@ -13,6 +13,7 @@ Scheme Equality for string.
 Inductive natType :=
 | errorNat : natType
 | num : nat -> natType.
+Scheme Equality for natType.
 Inductive boolType :=
 | errorBool : boolType
 | Boolean : bool -> boolType.
@@ -85,8 +86,9 @@ Inductive State :=
 | declareBool : string -> State
 | assignBool : string -> BExp -> State
 | declareString : string -> State
-| assignString : string -> CExp -> State
+| assignString : string -> string -> State
 | callFunction : string -> Params -> State
+| declareStruct : string -> State -> State
 | sequence : State -> State -> State
 | while : BExp -> State -> State
 | ifthen : BExp -> State -> State
@@ -110,9 +112,6 @@ Scheme Equality for Val.
 Compute booleans true.
 Compute strings "test".
 
-Inductive Struct :=
-| declStruct : string -> list Val -> Struct.
-
 Inductive Language :=
 | declFunction : string -> Params -> State -> Language
 | declGlobal: string -> Language
@@ -127,7 +126,7 @@ Notation "A :n:= B" := (assignNat A B) (at level 98).
 Notation "A :b:= B" := (assignBool A B) (at level 98).
 Notation "A :s:= B" := (assignString A B) (at level 98).
 Notation "A ;; B" := (sequence A B) (at level 98).
-Notation "'If' '(' A ')' { B } 'else' { C }" := (ifelse A B C) (at level 96).
+Notation "'Ife' '(' A ')' { B } 'ELSE' { C }" := (ifelse A B C) (at level 96).
 Notation "'If' '(' A ')' { B }" := (ifthen A B) (at level 96).
 Notation "'While' '(' A ')' '{' B '}'" := (while A B) (at level 96).
 Notation "'For' '(' A ';' B ';' C ')' '{' D '}'" := (A ;; while B (D ;; C)) (at level 96).
@@ -137,7 +136,7 @@ Notation "'Case' ( A ) : { B }" := (case A B) (at level 96).
 Notation "'Switch' ( A ) : { B } " := (switch A (cons B nil)) (at level 96).
 Notation "'Switch' ( A ) : { B1 ; B2 ; .. ; Bn }" := (switch A (cons B1 (cons B2 .. (cons Bn nil) ..))) (at level 96).
 Notation "'Function' A '(' B ')' '{' C '}'" := (declFunction A B C) (at level 96).
-Notation "'Struct' A { B1 ';;' B2 ';;' .. ';;' Bn ';;' }" := (declStruct A (cons B1(cons B2 .. (cons Bn nil) ..))) (at level 96).
+Notation "'Struct' A { B }" := (declareStruct A B) (at level 96).
 Notation "'main()' '{' A '}'" := (declMain A) (at level 99).
 Notation "'global' A " := (declGlobal A) (at level 96).
 Notation "A ;;; B " := (sequencer A B) (at level 96).
@@ -154,6 +153,7 @@ Check For (NAT "i";; ("i" :n:= 10);"i" >=' 0;"i" :n:= "i"++') {"a" :n:= "a" +' "
 Definition Env := string -> Val.
 Definition startEnv : Env := fun x => undecl.
 Compute (startEnv "hei").
+
 Definition checkTypeEquality (a : Val)(b : Val) : bool :=
   match a with
  | undecl => match b with
@@ -196,7 +196,7 @@ fun x =>
 
 Compute (startEnv "string").
 Compute (update startEnv "x" (booleans false) "x").
-Compute (update (update startEnv "x" def) "x" (naturals 25)) "x".
+Compute (update (update (update startEnv "x" def) "x" (naturals 25)) "x" (naturals 49)) "x".
 
 Definition plusNatType (a b : natType) : natType :=
   match a, b with
@@ -407,28 +407,190 @@ Definition defaultValues (n : nat) : Val :=
   end.
 
 Inductive List :=
-| nil : List
+| nul : List
 | push : nat -> List -> List.
 Fixpoint lengthList (list : List) : nat :=
   match list with
-    | nil => 0
+    | nul => 0
     | push _ list' => S (lengthList list')
   end.
-Compute lengthList (push 2 (push 3 (push 4(push 5 nil)))).
+Compute lengthList (push 2 (push 3 (push 4(push 5 nul)))).
 Fixpoint nthElement (n : nat) (list : List) : nat :=
   match n, list with
-    | _, nil => 0
-    | _, push x nil => x
+    | _, nul => 0
+    | _, push x nul => x
     | 0, push x list' => x
     | S n', push x list' => nthElement n' list'
   end. 
-Compute nthElement 6 (push 2 (push 3 (push 4(push 5 nil)))).
+Compute nthElement 6 (push 2 (push 3 (push 4(push 5 nul)))).
 
 Inductive Array := 
 | errorArray : Array
 | natArray : string -> nat -> List -> Array.
-Compute natArray "test" 5 (nil).
-Notation "'emptyArray' A ';' B ';' " := (natArray A B nil) (at level 70).
-Notation "'array' A ';' B ';' '=' [ a , .. , b ] " := (natArray A B (push a .. (push b nil) ..))(at level 80).
+Compute natArray "test" 5 (nul).
+Notation "'emptyArray' A ';' B ';' " := (natArray A B nul) (at level 70).
+Notation "'array' A ';' B ';' '=' [ a , .. , b ] " := (natArray A B (push a .. (push b nul) ..))(at level 80).
 Compute emptyArray "pls work" ;10; .
 Compute array "yes" ;2; = [ 2 , 3 ].
+
+Definition arrayNthElement (n : nat) (a : Array) : nat :=
+  match n, a with
+    | n, natArray name size list => if (Nat.ltb n (lengthList list)) then nthElement n list 
+                                    else 0
+    | _, _ => 0
+  end.
+Compute arrayNthElement 0 (array "hey" ;2; = [ 3 , 5 ]).
+
+Notation "A '?' B ';' C" := (ifelse A B C) (at level 97).
+Compute (2 >' 3) ? (NAT "a") ; (NAT "b").
+
+Inductive memory :=
+| defaultMemory : memory
+| offset : nat -> memory.
+Scheme Equality for memory.
+Definition memoryEnv := string -> memory.
+Definition memoryVal := memory -> Val.
+Definition startMemory : memoryVal := fun x=> undecl.
+Definition stackMachine := list memoryEnv.
+Definition defaultEnv : memoryEnv := fun x => defaultMemory.
+
+Compute (defaultEnv "default value").
+Check memoryEnv.
+
+Definition updateMemoryEnv (env: memoryEnv) (x: string) (n: memory) : memoryEnv :=
+  fun y =>
+    if (andb (string_beq x y ) (memory_beq (env y) defaultMemory)) then n
+    else (env y).
+Definition memoryUpdate (name : string) (type : memory)(value : Val)(env : memoryEnv) (memory : memoryVal) : memoryVal :=
+  fun y =>
+    if (andb (memory_beq y type) (memory_beq (env name) type)) then
+      if (andb (checkTypeEquality undecl (memory y)) (negb (checkTypeEquality def value))) then undecl
+      else if (andb (checkTypeEquality undecl (memory y)) (checkTypeEquality def value)) then def
+      else if (orb (checkTypeEquality def (memory y)) (checkTypeEquality def value)) then unassign
+      else value
+    else (memory y).
+
+Compute (memoryUpdate "ionut" defaultMemory def defaultEnv startMemory) defaultMemory.
+Compute (memoryUpdate "abc" defaultMemory (naturals 5) (updateMemoryEnv defaultEnv "abc" (offset 10)) startMemory) defaultMemory.
+
+Fixpoint structDeclaration (env : Env) (structName : string) (structBody : State) : Env :=
+  match structBody with
+    | declareNat variable => update (update env (append structName (append "." variable)) def) (append structName (append "." variable)) (num 0)
+    | declareBool variable => update (update env (append structName (append "." variable)) def) (append structName (append "." variable)) (Boolean false)
+    | declareString variable => update (update env (append structName (append "." variable)) def) (append structName (append "." variable)) (strings "")
+    | sequence a b => if (Nat.ltb 0 (declarations a)) then
+                        match a with
+                          | declareNat variable => structDeclaration (update (update env (append structName (append "." variable)) def) (append structName (append "." variable)) (num 0) ) structName b
+                          | declareBool variable => structDeclaration (update (update env (append structName (append "." variable)) def) (append structName (append "." variable)) (Boolean false) ) structName b
+                          | declareString variable => structDeclaration (update (update env (append structName (append "." variable)) def) (append structName (append "." variable)) (strings "") ) structName b
+                          | _ => env
+                        end
+                      else env
+    | _ => env
+  end.
+Compute (structDeclaration startEnv "struct" ( STRING "variable" )) "struct.variable".
+
+Fixpoint runProgram (state : State) (env : Env) (gas : nat) : Env :=
+  match gas with
+    | 0 => env
+    | S gas' => match state with
+                  | declareNat variable => update (update env variable def) variable (num 0)
+                  | assignNat variable value => update env variable (aEval value env)
+                  | declareBool variable => update (update env variable def) variable (Boolean false)
+                  | assignBool variable value => update env variable (bEval value env)
+                  | declareString variable => update (update env variable def) variable (strings "")
+                  | assignString variable value => update env variable (strings value)
+                  | sequence state1 state2 => runProgram state2 (runProgram state1 env gas') gas'
+                  | callFunction name params => env (*not yet implemented*)
+                  | declareStruct name state' => structDeclaration env name state'
+                  | ifthen condition state' => match (bEval condition env) with
+                                                | errorBool => env
+                                                | Boolean value => match value with 
+                                                                     | false => env 
+                                                                     | true => runProgram state' env gas'
+                                                                   end
+                                              end
+                  | ifelse condition state1 state2 => match (bEval condition env) with
+                                                        | errorBool => env
+                                                        | Boolean value => match value with
+                                                                             | true => runProgram state1 env gas'
+                                                                             | false => runProgram state2 env gas'
+                                                                           end
+                                                      end
+                  | while condition state' => match (bEval condition env) with
+                                               | errorBool => env
+                                               | Boolean value => match value with
+                                                                    | true => runProgram (state' ;; (while condition state')) env gas'
+                                                                    | false => env
+                                                                  end
+                                             end
+                  | switch expCase list => match list with 
+                                          | [] => env
+                                          | (case nat state') :: list' => if(natType_beq nat (aEval expCase env)) then runProgram state' env gas'
+                                                                          else runProgram ((switch expCase list') ;; state) env gas'
+                                          | (default state') :: list' => runProgram state' env gas'
+                                          end
+                end
+  end.
+
+Definition Test1 :=
+  NAT "a" ;;
+  NAT "b" ;;
+  ( "a" :n:= 3 ) ;;
+  ( "b" :n:= 4 ).
+
+Compute (runProgram Test1 startEnv 50) "a".
+Compute (runProgram Test1 startEnv 50) "b".
+
+Definition Test2 :=
+  NAT "a" ;;
+  NAT "b" ;;
+  ( "a" :n:= 3 ) ;;
+  ( "b" :n:= 4 ) ;;
+  NAT "c" ;;
+  Ife ( "a" <' "b" ) {
+    "c" :n:= "a" 
+  }
+  ELSE {
+    "c" :n:= "b"
+  } .
+Compute (runProgram Test2 startEnv 50) "c".
+
+Definition Test3 :=
+  NAT "a" ;;
+  NAT "b" ;;
+  ( "a" :n:= 63 ) ;;
+  ( "b" :n:= 24 ) ;;
+  While ( ( !' ( "a" ==' "b" ) ) ) {
+    Ife ( "a" <' "b" ) {
+      "b" :n:= ( "b" -' "a" )
+    }
+    ELSE {
+      "a" :n:= ( "a" -' "b" )
+    }
+  }.
+Compute (runProgram Test3 startEnv 100) "a".
+
+Definition Test4 := 
+  STRING "a" ;;
+  ( "a" :s:= "buenos dias" ).
+Compute (runProgram Test4 startEnv 100) "a".
+
+Definition Test5 :=
+  declareStruct "car" (STRING "model") ;;
+  ( "car.model" :s:= "dacia" ).
+Compute (runProgram Test5 startEnv 100) "car.model".
+
+Definition Test6 := 
+  NAT "a" ;;
+  ( "a" :n:= 1 ) ;;
+  NAT "i" ;;
+  For ( "i" :n:= 1 ; "i" <' 5 ; "i" :n:= "i" ++' ) {
+    ( "a" :n:= "a" *' "i" )
+  }.
+Compute (runProgram Test6 startEnv 100) "a".
+
+Definition Test7 :=
+  NAT "a" ;;
+  switch (2 +' 3) (cons (case 4 ("a" :n:= 2)) nil).
+Compute (runProgram Test7 startEnv 100) "a".
